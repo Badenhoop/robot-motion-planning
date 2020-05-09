@@ -110,8 +110,7 @@ def main():
 
     # draw collision map
     plt.sca(axes[1])
-    grid = collision_grid(robot, obstacles, 0.2 * np.pi)
-    print(grid)
+    grid = collision_grid(robot, obstacles, 0.1 * np.pi)
     plt.imshow(grid)
 
     plt.show()
