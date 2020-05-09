@@ -53,21 +53,14 @@ def collision_grid(robot, obstacles, resolution=0.2 * np.pi):
         config_spaces.append(config_space)
         grid_shape.append(len(config_space))
 
-    grid = np.zeros(grid_shape)
-    def check_collision(indices, config):
+    def check_collision(config):
         robot.config = config
-        grid[indices] = robot.check_collision(obstacles)
-    iter_spaces(config_spaces, check_collision)
-    return grid
+        return robot.check_collision(obstacles)
 
-
-def iter_spaces(spaces, f, indices=(), values=[]):
-    if len(spaces) == 0:
-        f(indices, values)
-        return
-    curr_space = spaces[0]
-    for index, value in enumerate(curr_space):
-        iter_spaces(spaces[1:], f, indices + (index,), values + [value])
+    D = len(grid_shape)
+    grid = np.array(np.meshgrid(*config_spaces)).T.reshape(-1, D)
+    grid = np.array([check_collision(config) for config in grid])
+    return grid.reshape(grid_shape)
 
 
 def draw_robot(robot):

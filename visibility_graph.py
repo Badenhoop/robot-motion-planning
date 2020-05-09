@@ -63,34 +63,40 @@ def toss_coin():
     return np.random.uniform(0., 1.) > 0.5
 
 
-def visibility_graph(obstacles):
-    segments = []
+class Node:
+    def __init__(self, point, neighbors=[]):
+        self.point = point
+        self.neighbors = neighbors
+
+
+def create_visibility_graph(obstacles):
+    nodes = [[Node(vertex) for vertex in obstacle.exterior.coords] for obstacle in obstacles]
+    edges = []
     obstacle_union = unary_union(obstacles)
-    for i, obstacle in enumerate(obstacles):
-        segments += polygon2Segments(obstacle)
-        # add each segment constructed by vertices of pairwise distinct objects that does not intersect with other obstacles
-        for j, other_obstacle in enumerate(obstacles):
-            if i == j:
-                continue
-            for vi in obstacle.exterior.coords:
-                for vj in other_obstacle.exterior.coords:
-                    segment = LineString([vi, vj])
-                    if segment.touches(obstacle_union):
-                        segments.append(segment)
-    return segments
+    for io, obstacle in enumerate(obstacles):
+        coords = obstacle.exterior.coords
+        for iv, vertex in enumerate(coords):
+            curr_node = nodes[io][iv]
+            prev_node = nodes[io][(iv - 1) % len(coords)]
+            next_node = nodes[io][(iv + 1) % len(coords)]
+            curr_node.neighbors += [prev_node, next_node]
+            edges.append((curr_node, next_node))
+            for jo in range(io + 1, len(obstacles)):
+                other_obstacle = obstacles[jo]
+                other_coords = other_obstacle.exterior.coords
+                for jv, other_vertex in enumerate(other_coords):
+                    line = LineString([vertex, other_vertex])
+                    if line.touches(obstacle_union):
+                        other_node = nodes[jo][jv]
+                        curr_node.neighbors.append(other_node)
+                        other_node.neighbors.append(curr_node)
+                        edges.append((curr_node, other_node))
+    return nodes, edges
 
 
-def polygon2Segments(polygon):
-    segments = []
-    for i in range(len(polygon.exterior.coords) - 1):
-        v1 = polygon.exterior.coords[i]
-        v2 = polygon.exterior.coords[i + 1]
-        segments.append(LineString([v1, v2]))
-    # add segment from last to first vertex
-    v_first = polygon.exterior.coords[0]
-    v_last = polygon.exterior.coords[-1]
-    segments.append(LineString([v_first, v_last]))
-    return segments
+def create_extended_visibility_graph(obstacles):
+    # TODO: implementation
+    pass
 
 
 def draw_polygon(polygon, color='blue'):
@@ -104,12 +110,12 @@ def draw_line_string(line_string, color='red'):
 
 def main():
     obstacles = generate_obstacles(num_obstacles=3, min_num_vertices=6)
-    edges = visibility_graph(obstacles)
+    nodes, edges = create_visibility_graph(obstacles)
 
     for obstacle in obstacles:
         draw_polygon(obstacle)
     for edge in edges:
-        draw_line_string(edge)
+        draw_line_string(LineString([edge[0].point, edge[1].point]))
 
     plt.xlim(-20., 20.)
     plt.ylim(-20., 20.)
