@@ -8,3 +8,7 @@ My own implementation of algorithms and examples following the Robot Motion Plan
 ## Visibility Graph
 
 ![](docs/visibility_graph.png)
+
+## Safety Diagram
+
+![](docs/safety_diagram.png)
