@@ -1,10 +1,11 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import patches
+import shapely
 from shapely.geometry import Polygon, Point, asPoint, asMultiPoint, LineString, asMultiLineString, MultiPolygon, MultiLineString
 from shapely.ops import unary_union
 
-np.random.seed(4)
+np.random.seed(6)
 
 
 def generate_obstacle(center, radius, min_num_vertices, num_cuts):
@@ -52,7 +53,8 @@ def generate_obstacles(num_obstacles, min_num_vertices):
         num_cuts = 3 if toss_coin() else 0
         obstacles.append(generate_obstacle(
             center, radius, min_num_vertices, num_cuts))
-    return unary_union(obstacles)
+    union = unary_union(obstacles)
+    return union if isinstance(union, MultiPolygon) else MultiPolygon([union])
 
 
 def sample_point(point, radius):
@@ -75,7 +77,7 @@ def create_visibility_graph(obstacles):
                     line = LineString([vertex, other_vertex])
                     if line.touches(obstacles):
                         entities.append(line)
-    return entities
+    return unary_union(entities)
 
 
 def create_simplified_visibility_graph(obstacles):
@@ -88,23 +90,27 @@ def create_simplified_visibility_graph(obstacles):
             # Get the enclosing lines
             # -----------------------
             # Get the combined shape of each of the obstacles convex hull.
-            combined = MultiPolygon([obstacle.convex_hull, other_obstacle.convex_hull])
+            combined = MultiPolygon(
+                [obstacle.convex_hull, other_obstacle.convex_hull])
             # Get the convex hull of the combined shape.
             hull = combined.convex_hull
-            # The enclosing are now the difference between the convex hull and the combined shape. 
+            # The enclosing are now the difference between the convex hull and the combined shape.
             enclosing_lines = hull.boundary.difference(combined.boundary)
 
-            # Add the enclosing lines if there they don't collisde with other obstacles. 
+            # Add the enclosing lines if there they don't collisde with other obstacles.
             for line in enclosing_lines:
                 if line.touches(obstacles):
                     entities.append(line)
-            
+
             # Get the seperating lines
             # ------------------------
             enclosing_points = enclosing_lines.intersection(obstacle)
-            other_enclosing_points = enclosing_lines.intersection(other_obstacle)
-            entities.append(seperating_lines(obstacle, obstacles, other_enclosing_points))
-            entities.append(seperating_lines(other_obstacle, obstacles, enclosing_points))
+            other_enclosing_points = enclosing_lines.intersection(
+                other_obstacle)
+            entities.append(seperating_lines(
+                obstacle, obstacles, other_enclosing_points))
+            entities.append(seperating_lines(
+                other_obstacle, obstacles, enclosing_points))
     return unary_union(entities)
 
 
@@ -119,7 +125,7 @@ def seperating_lines(obstacle, obstacles, enclosing_points):
 
 
 def draw_polygon(polygon, color='blue'):
-    plt.gca().add_patch(patches.Polygon(polygon.boundary, closed=False, color=color))
+    plt.gca().add_patch(patches.Polygon(polygon.exterior, closed=False, color=color))
 
 
 def draw_line_string(line_string, color='red'):
@@ -139,6 +145,10 @@ def main():
     for line in lines:
         draw_line_string(line)
 
+    plt.title('visibility graph')
+    plt.xlim(-15., 15.)
+    plt.ylim(-15., 15.)
+
     lines = create_simplified_visibility_graph(obstacles)
     plt.sca(axes[1])
     for obstacle in obstacles:
@@ -146,7 +156,12 @@ def main():
     for line in lines:
         draw_line_string(line)
 
+    plt.title('simplified visibility graph')
+    plt.xlim(-15., 15.)
+    plt.ylim(-15., 15.)
+
     plt.show()
+
 
 if __name__ == '__main__':
     main()
