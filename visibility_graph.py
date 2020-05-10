@@ -4,7 +4,7 @@ from matplotlib import patches
 from shapely.geometry import Polygon, Point, asPoint, asMultiPoint, LineString, asMultiLineString, MultiPolygon, MultiLineString
 from shapely.ops import unary_union
 
-np.random.seed(2)
+np.random.seed(4)
 
 
 def generate_obstacle(center, radius, min_num_vertices, num_cuts):
@@ -16,7 +16,7 @@ def generate_obstacle(center, radius, min_num_vertices, num_cuts):
         rand_points = radius * \
             np.random.normal(0., 1., size=(num_gen_points, 2)) + center
         hull = asMultiPoint(rand_points).convex_hull
-        num_vertices = len(hull.exterior.coords)
+        num_vertices = len(hull.boundary.coords)
         num_gen_points *= 2
 
     # generate cuts (may rarely lead to invalid polygon)
@@ -30,14 +30,14 @@ def generate_obstacle(center, radius, min_num_vertices, num_cuts):
 def generate_cuts(polygon, num_cuts, cut_radius):
     cut_radius = cut_radius
     for i in range(num_cuts):
-        vertices = polygon.exterior.coords
+        vertices = polygon.boundary.coords
         idx = np.random.choice(len(vertices) - 1)
         v1 = vertices[idx]
         v2 = vertices[idx + 1]
-        midpoint = asPoint(0.5 * (np.array(v2) + np.array(v1)))
-        cut_point = sample_point(midpoint, cut_radius)
+        centroid = LineString([v1, v2]).centroid
+        cut_point = sample_point(centroid, cut_radius)
         while not polygon.contains(cut_point):
-            cut_point = sample_point(midpoint, cut_radius)
+            cut_point = sample_point(centroid, cut_radius)
         new_vertices = vertices[:idx + 1] + [cut_point] + vertices[idx + 1:]
         polygon = Polygon(new_vertices)
     return polygon
@@ -52,7 +52,7 @@ def generate_obstacles(num_obstacles, min_num_vertices):
         num_cuts = 3 if toss_coin() else 0
         obstacles.append(generate_obstacle(
             center, radius, min_num_vertices, num_cuts))
-    return obstacles
+    return unary_union(obstacles)
 
 
 def sample_point(point, radius):
@@ -67,14 +67,17 @@ class Node:
     def __init__(self, point, neighbors=[]):
         self.point = point
         self.neighbors = neighbors
+    
+    def __eq__(self, other):
+        return self.point == other.point
 
 
 def create_visibility_graph(obstacles):
-    nodes = [[Node(vertex) for vertex in obstacle.exterior.coords] for obstacle in obstacles]
+    nodes = [[Node(vertex) for vertex in obstacle.boundary.coords] for obstacle in obstacles]
     edges = []
-    obstacle_union = unary_union(obstacles)
+    N = len(list(obstacles))
     for io, obstacle in enumerate(obstacles):
-        coords = obstacle.exterior.coords
+        coords = obstacle.boundary.coords
         for iv, vertex in enumerate(coords):
             curr_node = nodes[io][iv]
             prev_node = nodes[io][(iv - 1) % len(coords)]
@@ -83,10 +86,10 @@ def create_visibility_graph(obstacles):
             edges.append((curr_node, next_node))
             for jo in range(io + 1, len(obstacles)):
                 other_obstacle = obstacles[jo]
-                other_coords = other_obstacle.exterior.coords
+                other_coords = other_obstacle.boundary.coords
                 for jv, other_vertex in enumerate(other_coords):
                     line = LineString([vertex, other_vertex])
-                    if line.touches(obstacle_union):
+                    if line.touches(obstacles):
                         other_node = nodes[jo][jv]
                         curr_node.neighbors.append(other_node)
                         other_node.neighbors.append(curr_node)
@@ -94,13 +97,59 @@ def create_visibility_graph(obstacles):
     return nodes, edges
 
 
-def create_extended_visibility_graph(obstacles):
-    # TODO: implementation
+class SpatialHashMap:
+    # TODO: implement this
+    def __init__(self):
+        pass
+
+
+def edges_to_graph():
+    # TODO: implement this
     pass
 
 
+def create_simplified_visibility_graph(obstacles):
+    entities = []
+    N = len(list(obstacles))
+    for io, obstacle in enumerate(obstacles):
+        entities.append(obstacle.boundary)
+        for jo in range(io + 1, N):
+            other_obstacle = obstacles[jo]
+            # Get the enclosing lines
+            # -----------------------
+            # Get the combined shape of each of the obstacles convex hull.
+            combined = MultiPolygon([obstacle.convex_hull, other_obstacle.convex_hull])
+            # Get the convex hull of the combined shape.
+            hull = combined.convex_hull
+            # The enclosing are now the difference between the convex hull and the combined shape. 
+            enclosing_lines = hull.boundary.difference(combined.boundary)
+
+            # Add the enclosing lines if there they don't collisde with other obstacles. 
+            for line in enclosing_lines:
+                if line.touches(obstacles):
+                    entities.append(line)
+            
+            # Get the seperating lines
+            # ------------------------
+            enclosing_points = enclosing_lines.intersection(obstacle)
+            other_enclosing_points = enclosing_lines.intersection(other_obstacle)
+            entities.append(seperating_lines(obstacle, obstacles, other_enclosing_points))
+            entities.append(seperating_lines(other_obstacle, obstacles, enclosing_points))
+    return unary_union(entities)
+
+
+def seperating_lines(obstacle, obstacles, enclosing_points):
+    lines = []
+    for vertex in obstacle.boundary.coords:
+        line1 = LineString([vertex, enclosing_points[0]])
+        line2 = LineString([vertex, enclosing_points[1]])
+        if line1.touches(obstacles) and line2.touches(obstacles):
+            lines += [line1, line2]
+    return MultiLineString(lines)
+
+
 def draw_polygon(polygon, color='blue'):
-    plt.gca().add_patch(patches.Polygon(polygon.exterior, closed=False, color=color))
+    plt.gca().add_patch(patches.Polygon(polygon.boundary, closed=False, color=color))
 
 
 def draw_line_string(line_string, color='red'):
@@ -110,17 +159,26 @@ def draw_line_string(line_string, color='red'):
 
 def main():
     obstacles = generate_obstacles(num_obstacles=3, min_num_vertices=6)
-    nodes, edges = create_visibility_graph(obstacles)
 
+    fig, axes = plt.subplots(2)
+
+    plt.sca(axes[0])
+
+    nodes, edges = create_visibility_graph(obstacles)
     for obstacle in obstacles:
         draw_polygon(obstacle)
     for edge in edges:
         draw_line_string(LineString([edge[0].point, edge[1].point]))
 
-    plt.xlim(-20., 20.)
-    plt.ylim(-20., 20.)
-    plt.show()
+    plt.sca(axes[1])
 
+    lines = create_simplified_visibility_graph(obstacles)
+    for obstacle in obstacles:
+        draw_polygon(obstacle)
+    for line in lines:
+        draw_line_string(line)
+
+    plt.show()
 
 if __name__ == '__main__':
     main()
