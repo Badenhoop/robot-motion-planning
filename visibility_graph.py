@@ -63,49 +63,19 @@ def toss_coin():
     return np.random.uniform(0., 1.) > 0.5
 
 
-class Node:
-    def __init__(self, point, neighbors=[]):
-        self.point = point
-        self.neighbors = neighbors
-    
-    def __eq__(self, other):
-        return self.point == other.point
-
-
 def create_visibility_graph(obstacles):
-    nodes = [[Node(vertex) for vertex in obstacle.boundary.coords] for obstacle in obstacles]
-    edges = []
+    entities = []
     N = len(list(obstacles))
     for io, obstacle in enumerate(obstacles):
-        coords = obstacle.boundary.coords
-        for iv, vertex in enumerate(coords):
-            curr_node = nodes[io][iv]
-            prev_node = nodes[io][(iv - 1) % len(coords)]
-            next_node = nodes[io][(iv + 1) % len(coords)]
-            curr_node.neighbors += [prev_node, next_node]
-            edges.append((curr_node, next_node))
-            for jo in range(io + 1, len(obstacles)):
-                other_obstacle = obstacles[jo]
-                other_coords = other_obstacle.boundary.coords
-                for jv, other_vertex in enumerate(other_coords):
+        entities.append(obstacle.boundary)
+        for jo in range(io + 1, N):
+            other_obstacle = obstacles[jo]
+            for vertex in obstacle.boundary.coords:
+                for other_vertex in other_obstacle.boundary.coords:
                     line = LineString([vertex, other_vertex])
                     if line.touches(obstacles):
-                        other_node = nodes[jo][jv]
-                        curr_node.neighbors.append(other_node)
-                        other_node.neighbors.append(curr_node)
-                        edges.append((curr_node, other_node))
-    return nodes, edges
-
-
-class SpatialHashMap:
-    # TODO: implement this
-    def __init__(self):
-        pass
-
-
-def edges_to_graph():
-    # TODO: implement this
-    pass
+                        entities.append(line)
+    return entities
 
 
 def create_simplified_visibility_graph(obstacles):
@@ -162,17 +132,15 @@ def main():
 
     fig, axes = plt.subplots(2)
 
+    lines = create_visibility_graph(obstacles)
     plt.sca(axes[0])
-
-    nodes, edges = create_visibility_graph(obstacles)
     for obstacle in obstacles:
         draw_polygon(obstacle)
-    for edge in edges:
-        draw_line_string(LineString([edge[0].point, edge[1].point]))
-
-    plt.sca(axes[1])
+    for line in lines:
+        draw_line_string(line)
 
     lines = create_simplified_visibility_graph(obstacles)
+    plt.sca(axes[1])
     for obstacle in obstacles:
         draw_polygon(obstacle)
     for line in lines:
