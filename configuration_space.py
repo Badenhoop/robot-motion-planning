@@ -100,11 +100,13 @@ def main():
     for obstacle in obstacles:
         draw_polygon(obstacle)
     draw_robot(robot)
+    plt.title('Scene')
 
     # draw collision map
     plt.sca(axes[1])
     grid = collision_grid(robot, obstacles, 0.1 * np.pi)
     plt.imshow(grid)
+    plt.title('Configuration Space')
 
     plt.show()
 
