@@ -54,7 +54,7 @@ def main():
     plt.gca().set_aspect('equal')
 
     plt.sca(axes[1])
-    plt.imshow(diag)
+    plt.imshow(np.flip(diag, axis=0))
     plt.gca().set_aspect('equal')
 
     plt.show()
