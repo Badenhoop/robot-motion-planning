@@ -2,59 +2,42 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import patches
 import shapely
-from shapely.geometry import Polygon, Point, asPoint, asMultiPoint, LineString, asMultiLineString, MultiPolygon, MultiLineString
+from shapely.geometry import *
 from shapely.ops import unary_union
 
-np.random.seed(6)
+np.random.seed(5)
 
 
-def generate_obstacle(center, radius, min_num_vertices, num_cuts):
-    # generate a convex hull with at least min_num_vertices vertices
-    num_vertices = 0
-    hull = None
-    num_gen_points = min_num_vertices * 10
-    while num_vertices < min_num_vertices:
-        rand_points = radius * \
-            np.random.normal(0., 1., size=(num_gen_points, 2)) + center
-        hull = asMultiPoint(rand_points).convex_hull
-        num_vertices = len(hull.boundary.coords)
-        num_gen_points *= 2
-
-    # generate cuts (may rarely lead to invalid polygon)
-    obstacle = generate_cuts(hull, num_cuts, radius)
-    while not obstacle.is_valid:
-        obstacle = generate_cuts(hull, num_cuts, radius)
-
-    return obstacle
-
-
-def generate_cuts(polygon, num_cuts, cut_radius):
-    cut_radius = cut_radius
-    for i in range(num_cuts):
-        vertices = polygon.boundary.coords
-        idx = np.random.choice(len(vertices) - 1)
-        v1 = vertices[idx]
-        v2 = vertices[idx + 1]
-        centroid = LineString([v1, v2]).centroid
-        cut_point = sample_point(centroid, cut_radius)
-        while not polygon.contains(cut_point):
-            cut_point = sample_point(centroid, cut_radius)
-        new_vertices = vertices[:idx + 1] + [cut_point] + vertices[idx + 1:]
-        polygon = Polygon(new_vertices)
-    return polygon
-
-
-def generate_obstacles(num_obstacles, min_num_vertices):
+def generate_obstacles(
+        num_obstacles,
+        bounds = (-10., -10., 10., 10.),
+        min_radius = 2.,
+        max_radius = 10.,
+        num_vertices_range = list(range(6, 15))):
     obstacles = []
+    x_min, y_min, x_max, y_max = bounds
     for i in range(num_obstacles):
         vertices = []
-        center = asPoint(np.random.uniform(-10., 10., size=(2,)))
-        radius = np.random.uniform(1., 2.)
-        num_cuts = 3 if toss_coin() else 0
+        x_center = np.random.uniform(x_min, x_max)
+        y_center = np.random.uniform(y_min, y_max)
+        center = Point(x_center, y_center)
+        radius = np.random.uniform(min_radius, max_radius)
+        num_vertices = np.random.choice(num_vertices_range)
         obstacles.append(generate_obstacle(
-            center, radius, min_num_vertices, num_cuts))
+            center, radius, num_vertices))
     union = unary_union(obstacles)
     return union if isinstance(union, MultiPolygon) else MultiPolygon([union])
+
+
+def generate_obstacle(center, radius, num_vertices):
+    angle_increment = 2. * np.pi / num_vertices
+    angles = angle_increment * np.arange(num_vertices)
+    radi = radius * np.random.uniform(0.1, 1.0, size=(num_vertices,))
+    vertices = np.zeros((num_vertices, 2))
+    vertices[:, 0] = radi * np.cos(angles)
+    vertices[:, 1] = radi * np.sin(angles)
+    vertices += center
+    return asPolygon(vertices)
 
 
 def sample_point(point, radius):
@@ -77,7 +60,9 @@ def create_visibility_graph(obstacles):
                     line = LineString([vertex, other_vertex])
                     if line.touches(obstacles):
                         entities.append(line)
-    return unary_union(entities)
+
+    union = unary_union(entities) 
+    return union if isinstance(union, MultiLineString) else MultiLineString([union])
 
 
 def create_simplified_visibility_graph(obstacles):
@@ -111,7 +96,9 @@ def create_simplified_visibility_graph(obstacles):
                 obstacle, obstacles, other_enclosing_points))
             entities.append(seperating_lines(
                 other_obstacle, obstacles, enclosing_points))
-    return unary_union(entities)
+
+    union = unary_union(entities) 
+    return union if isinstance(union, MultiLineString) else MultiLineString([union])
 
 
 def seperating_lines(obstacle, obstacles, enclosing_points):
@@ -134,7 +121,7 @@ def draw_line_string(line_string, color='red'):
 
 
 def main():
-    obstacles = generate_obstacles(num_obstacles=3, min_num_vertices=6)
+    obstacles = generate_obstacles(num_obstacles=3)
 
     fig, axes = plt.subplots(2)
 
@@ -148,6 +135,7 @@ def main():
     plt.title('visibility graph')
     plt.xlim(-15., 15.)
     plt.ylim(-15., 15.)
+    plt.gca().set_aspect('equal')
 
     lines = create_simplified_visibility_graph(obstacles)
     plt.sca(axes[1])
@@ -159,6 +147,7 @@ def main():
     plt.title('simplified visibility graph')
     plt.xlim(-15., 15.)
     plt.ylim(-15., 15.)
+    plt.gca().set_aspect('equal')
 
     plt.show()
 
