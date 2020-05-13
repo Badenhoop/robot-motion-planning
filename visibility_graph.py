@@ -40,14 +40,6 @@ def generate_obstacle(center, radius, num_vertices):
     return asPolygon(vertices)
 
 
-def sample_point(point, radius):
-    return asPoint(radius * np.random.uniform(-1., 1., size=(2,)) + np.array(point))
-
-
-def toss_coin():
-    return np.random.uniform(0., 1.) > 0.5
-
-
 def create_visibility_graph(obstacles):
     entities = []
     N = len(list(obstacles))
